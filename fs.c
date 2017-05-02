@@ -1,7 +1,6 @@
 //David Durkin and Chris Beaufils
 //OS Project 6
 
-
 #include "fs.h"
 #include "disk.h"
 #include <stdio.h>
@@ -62,6 +61,9 @@ void inode_save(int inumber, struct fs_inode *inode) {
     disk_write((int) (inumber/INODES_PER_BLOCK) + 1, block.data);
 }
 
+// Creates a new filesystem on the disk, destroying any data already present.
+// Sets aside ten percent of the blocks for inodes, clears the inode table, and writes the superblock.
+// Returns one on success, zero otherwise
 int fs_format()
 {
 	union fs_block block;
@@ -99,6 +101,7 @@ int fs_format()
 	return 1;
 }
 
+// Scan a mounted filesystem and report on how the inodes and blocks are organized
 void fs_debug()
 {
 	union fs_block block;
@@ -122,24 +125,28 @@ void fs_debug()
 
 			// if block is valid/not empty
             if (block.inode[j].isvalid) {
+
                 printf("inode %d:\n", j);
                 printf("\tsize: %d bytes\n", block.inode[j].size);
                 printf("\tdirect blocks:");
 
 				// print direct blocks
                 for(l = 0; l < POINTERS_PER_INODE; l++){
+
                     if(block.inode[j].direct[l]) printf(" %d",block.inode[j].direct[l]);
                 }
                 printf("\n");
 
 				// print indirect blocks
                 if(block.inode[j].indirect){
+
                     printf("\tindirect block: %d\n", block.inode[j].indirect);
                     printf("\tindirect data blocks:");
 
 					disk_read(block.inode[j].indirect, block.data);
 
                     for (m=0; m<POINTERS_PER_BLOCK; m++) {
+
                         if(block.pointers[m]) printf(" %d", block.pointers[m]);
                     }
                     printf("\n");
@@ -149,6 +156,8 @@ void fs_debug()
     }
 }
 
+// Examine the disk for a filesystem.
+// If one is present, read the superblock, build a free block bitmap, and prepare the filesystem for use
 int fs_mount()
 {
     if (is_mounted == true) {
@@ -166,6 +175,7 @@ int fs_mount()
     bitmap = (int) malloc(bitmap_size*sizeof(int));
 
     for (i=0; i<bitmap_size; i++) {
+
         bitmap[i] = 0;
     }
 
@@ -174,6 +184,7 @@ int fs_mount()
     inode_table = (int) malloc(num_inodes*sizeof(int));
 
     for (i=0; i<num_inodes; i++) {
+
         inode_table[i] = 0;
     }
 
@@ -182,6 +193,7 @@ int fs_mount()
 
     int ninodeblocks = block.super.ninodeblocks;
     for (i=1; i<=ninodeblocks; i++) {
+
         bitmap[i] = 1;
 
         for (j=0; j<INODES_PER_BLOCK; j++) {
@@ -194,6 +206,7 @@ int fs_mount()
 
 				// print the direct blocks
                 for(l = 0; l < POINTERS_PER_INODE; l++){
+
                     if(block.inode[j].direct[l]) bitmap[block.inode[j].direct[l]] = 1;
                 }
 
@@ -204,6 +217,7 @@ int fs_mount()
                     disk_read(block.inode[j].indirect, block.data);
 
 					for (m=0; m<POINTERS_PER_BLOCK; m++) {
+
                         if(block.pointers[m]) bitmap[block.pointers[m]] = 1;
                     }
                 }
@@ -215,6 +229,7 @@ int fs_mount()
 	return 1;
 }
 
+// Create a new inode of zero length. On success, return the (positive) inumber. On failure, return zero
 int fs_create()
 {
 
@@ -231,12 +246,14 @@ int fs_create()
     for (i=1; i<num_inodes; i++) {
 
 		if (inode_table[i]==0) {
+
             inode_table[i] = 1;
             inode_load(i, &inode);
             inode.isvalid=1;
             inode.size=0;
 
 			for (j = 0; j < POINTERS_PER_INODE; j++) {
+
                 inode.direct[j] = 0;
             }
 
@@ -250,6 +267,8 @@ int fs_create()
 	return 0;
 }
 
+// Delete the inode indicated by the inumber.
+// Release all data and indirect blocks assigned to this inode and return them to the free block map
 int fs_delete( int inumber )
 {
 
@@ -257,6 +276,7 @@ int fs_delete( int inumber )
     struct fs_inode inode;
 
     if (is_mounted == false) {
+
         printf("Disk not yet mounted!\n");
         return 0;
     }
@@ -293,10 +313,12 @@ int fs_delete( int inumber )
     return 1;
 }
 
+// Return the logical size of the given inode, in bytes
 int fs_getsize( int inumber )
 {
 
 	if (is_mounted == false) {
+
         printf("Disk not yet mounted!\n");
         return 0;
     }
@@ -315,9 +337,13 @@ int fs_getsize( int inumber )
 	return -1;
 }
 
+// Read data from a valid inode.
+// Copy "length" bytes from the inode into the "data" pointer, starting at "offset" in the inode.
+// Return the total number of bytes read
 int fs_read( int inumber, char *data, int length, int offset )
 {
 	if (is_mounted == false) {
+
         printf("Disk not yet mounted!\n");
         return 0;
     }
@@ -348,6 +374,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 		if(inode.direct[i]){
 
 			if (first == 0) {
+
                 disk_read(inode.direct[i], block.data);
 
 				for(j = 0; j+curroffset < DISK_BLOCK_SIZE; j++){
@@ -369,6 +396,7 @@ int fs_read( int inumber, char *data, int length, int offset )
                 first = 1;
             }
             else{
+
                 disk_read(inode.direct[i], block.data);
 
 				for(j = 0; j < DISK_BLOCK_SIZE; j++){
@@ -401,6 +429,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 		for(i = startIndirect; i < POINTERS_PER_BLOCK; i++){
 
 			if (indirectBlock.pointers[i]){
+
                 disk_read(indirectBlock.pointers[i], block.data);
 
 				for(j = 0; j < DISK_BLOCK_SIZE; j++){
@@ -425,6 +454,10 @@ int fs_read( int inumber, char *data, int length, int offset )
     return current_byte;
 }
 
+// Write data to a valid inode.
+// Copy "length" bytes from the pointer "data" into the inode starting at "offset" bytes.
+// Allocate any necessary direct and indirect blocks in the process.
+// Return the number of bytes actually written
 int fs_write( int inumber, const char *data, int length, int offset )
 {
 	if (is_mounted == false) {
@@ -560,6 +593,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
             disk_read(indirectBlock.pointers[i], block.data);
 
 			for(j = 0; j < DISK_BLOCK_SIZE; j++){
+
                 block.data[j] = data[current_byte];
                 current_byte++;
 
